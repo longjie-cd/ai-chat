@@ -6,7 +6,9 @@ export function useChat() {
         chat_ref: ref(), //对话对象
         chat_list: message,// 对话内容
         eventSource: null,// sse连接
-        url: "http://127.0.0.1:8000/api/ai/bailian/" // sse 请求地址
+        url: "http://127.0.0.1:8000/api/ai/bailian/", // sse 请求地址
+        is_test: true,//是否测试
+        intervalId: null,// 定时器
     });
     // 清空会话
     const clearMessage = function () {
@@ -42,18 +44,32 @@ export function useChat() {
         // 获取聊天列表的最后一项
         const lastChatItem = state.chat_list[0];
         // 发送请求
-        await sse(meaasge, {
-            success: (data) => {
-                state.loading = false;// 隐藏加载状态
-                // 追加响应数据到聊天项内容中
-                lastChatItem.content += data;
-            }, fail: (data) => {
-                console.log(data) // 异常
-            }, complete: (data) => {
-                state.stop_disabled = false;
-                state.loading = false;
-            }
-        });
+        if (state.is_test) {
+            await testMessage(meaasge, {
+                success: (data) => {
+                    state.loading = false;// 隐藏加载状态
+                    lastChatItem.content += data;// 追加响应数据到聊天项内容中
+                }, fail: (data) => {
+                    console.log(data) // 异常
+                }, complete: (data) => {
+                    state.stop_disabled = false;
+                    state.loading = false;
+                }
+            });
+        } else {
+            await sse(meaasge, {
+                success: (data) => {
+                    state.loading = false;// 隐藏加载状态
+                    // 追加响应数据到聊天项内容中
+                    lastChatItem.content += data;
+                }, fail: (data) => {
+                    console.log(data) // 异常
+                }, complete: (data) => {
+                    state.stop_disabled = false;
+                    state.loading = false;
+                }
+            });
+        }
     }
     const sse = (meaasge, options) => {
         const {success, fail, complete} = options;
@@ -77,10 +93,29 @@ export function useChat() {
     }
     // 停止对话
     const stopMessage = () => {
+        if (state.is_test) {
+            clearInterval(state.intervalId);// 清除定时器，停止执行
+        } else {
+            state.eventSource.close();
+        }
         // 关闭加载状态
         state.loading = false;
         state.stop_disabled = false;
-        state.eventSource.close();
+    }
+    // 测试回话
+    const testMessage = (meaasge, options) => {
+        const {success, fail, complete} = options;
+        // 初始化计数器
+        let count = 0;
+        // 设置定时器
+        state.intervalId = setInterval(() => {
+            count++; // 每次执行时计数器加 1
+            if (count > 10) {// 当执行次数达到 10 次时
+                complete?.(true);// 调用 complete 回调函数，传递 true 表示请求成功
+                clearInterval(state.intervalId);// 清除定时器，停止执行
+            }
+            success?.("模拟回复-");
+        }, 500);
     }
     return {
         ...toRefs(state), clearMessage, stopMessage, sendMessage
